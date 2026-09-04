@@ -7,6 +7,9 @@ SRCS
     "nvs_config.c"
     "display.c"
     "screen.c"
+    "btc_price.c"
+    "naja_dashboard.c"
+    "naja_dashboard_ui.c"
     "input.c"
     "filesystem.c"
     "system.c"
@@ -87,12 +90,14 @@ PRIV_REQUIRES
     "esp_app_format"
     "esp_driver_gpio"
     "esp_event"
+    "esp_http_client"
     "esp_http_server"
     "esp_lcd"
     "esp_netif"
     "esp_psram"
     "esp_timer"
     "esp_wifi"
+    "mbedtls"
     "nvs_flash"
     "spiffs"
     "vfs"
@@ -171,7 +176,6 @@ else()
     # Track index.html.gz which is generated as part of the build
     set(WEB_UI_OUTPUT "${WEB_SRC_DIR}/dist/axe-os/index.html.gz")
 
-    # Custom command that only runs when source files change
     add_custom_command(
         OUTPUT ${WEB_UI_STAMP} ${WEB_UI_OUTPUT}
         COMMAND ${NPM_EXECUTABLE} i

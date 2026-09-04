@@ -29,6 +29,7 @@
 #include "filesystem.h"
 #include "log_buffer.h"
 #include "setup_ble.h"
+#include "naja_dashboard.h"
 #include "esp_ota_ops.h"
 
 static GlobalState GLOBAL_STATE;
@@ -245,6 +246,16 @@ void app_main(void)
         protocol_coordinator_init(&GLOBAL_STATE);
         if (xTaskCreateWithCaps(protocol_coordinator_task, "protocol coord", 8192, (void *) &GLOBAL_STATE, 5, NULL, MALLOC_CAP_SPIRAM) != pdPASS) {
             ESP_LOGE(TAG, "Error creating protocol coordinator task");
+        }
+    }
+
+    if (!GLOBAL_STATE.SELF_TEST_MODULE.is_active &&
+        system_init_ret == ESP_OK &&
+        GLOBAL_STATE.SYSTEM_MODULE.is_screen_active &&
+        GLOBAL_STATE.DEVICE_CONFIG.pins.i80 != NULL) {
+        esp_err_t dashboard_ret = naja_dashboard_start(&GLOBAL_STATE);
+        if (dashboard_ret != ESP_OK) {
+            ESP_LOGW(TAG, "Large-display dashboard failed to start: %s", esp_err_to_name(dashboard_ret));
         }
     }
 
