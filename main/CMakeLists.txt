@@ -7,6 +7,7 @@ SRCS
     "nvs_config.c"
     "display.c"
     "screen.c"
+    "network_clock.c"
     "btc_price.c"
     "btc_price_data.c"
     "naja_dashboard.c"

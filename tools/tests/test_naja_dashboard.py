@@ -45,8 +45,19 @@ PREAMBLE = r'''
 #include "btc_price_data.h"
 #define ESP_OK 0
 #define ESP_ERR_INVALID_SIZE 1
+#define ESP_ERR_INVALID_STATE 2
+#define ESP_FAIL 3
 #define ESP_LOGI(...) ((void)0)
 typedef int esp_err_t;
+typedef struct {const char *server;} esp_sntp_config_t;
+#define ESP_NETIF_SNTP_DEFAULT_CONFIG(server_name) ((esp_sntp_config_t){server_name})
+static bool clock_initialized;
+static int clock_init_calls, clock_init_result;
+static esp_err_t esp_netif_sntp_init(const esp_sntp_config_t *config) {
+    if (strcmp(config->server,"pool.ntp.org") != 0) {abort();}
+    clock_init_calls++;
+    return clock_init_result;
+}
 #define portENTER_CRITICAL(x) ((void)(x))
 #define portEXIT_CRITICAL(x) ((void)(x))
 #include "btc_price.h"
@@ -118,6 +129,11 @@ static void reset(void) {
     now_us=1000000;dashboard_set_page(DASH_PAGE_HOME);
 }
 int main(void) {
+    clock_init_result=ESP_FAIL;CHECK(network_clock_start()==ESP_FAIL);CHECK(!clock_initialized);
+    clock_init_result=ESP_OK;CHECK(network_clock_start()==ESP_OK);CHECK(clock_initialized);
+    CHECK(clock_init_calls==2);CHECK(network_clock_start()==ESP_OK);CHECK(clock_init_calls==2);
+    clock_initialized=false;clock_init_result=ESP_ERR_INVALID_STATE;
+    CHECK(network_clock_start()==ESP_OK);CHECK(clock_initialized);
     reset();CHECK(dashboard_allowed());
     // Same-phase consecutive clicks: the old inactivity-polling approach missed one.
     screen_button_press();now_us+=500000;screen_button_press();
@@ -195,6 +211,11 @@ int main(void) {
 def main() -> None:
     screen = function('main/screen.c', 'screen_button_press')
     assert screen.index('identify_mode_time_ms = 0') < screen.index('naja_dashboard_next_if_active')
+    app = (ROOT / 'main/main.c').read_text()
+    clock_start = app.index('network_clock_start()')
+    assert clock_start < app.index('protocol_coordinator_init(')
+    assert clock_start < app.index('naja_dashboard_start(')
+    assert 'network_clock.c' in (ROOT / 'main/CMakeLists.txt').read_text()
     dash = (ROOT / 'main/naja_dashboard.c').read_text()
     assert 'previous_inactive_ms' not in dash
     assert 'screen_get_stats_screen()' in dash
@@ -208,7 +229,7 @@ def main() -> None:
         text = (ROOT / path).read_text()
         assert not re.search(r'\b(?:192\.168\.\d+\.\d+|10\.\d+\.\d+\.\d+|172\.(?:1[6-9]|2\d|3[01])\.\d+\.\d+)\b', text)
         assert not re.search(r'github_pat_|ghp_|Authorization:\s*Bearer', text)
-    functions = []
+    functions = [function('main/network_clock.c', 'network_clock_start')]
     for name in ['dashboard_set_label_text','dashboard_set_label_format','dashboard_set_page',
                  'format_grouped_u64','dashboard_format_usd','dashboard_format_hashrate',
                  'rssi_bar_count','dashboard_rssi_quality']:

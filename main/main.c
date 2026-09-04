@@ -30,6 +30,7 @@
 #include "log_buffer.h"
 #include "setup_ble.h"
 #include "naja_dashboard.h"
+#include "network_clock.h"
 #include "esp_ota_ops.h"
 
 static GlobalState GLOBAL_STATE;
@@ -206,6 +207,16 @@ void app_main(void)
 
     // Connected to WiFi: tear down the setup BLE service to free the radio.
     setup_ble_stop();
+
+    // Certificate date checks apply to TLS pools too, not just the price feed.
+    // Start SNTP on every normal boot, independently of board/display settings.
+    // Do not wait here: synchronization runs asynchronously with normal retries.
+    if (!GLOBAL_STATE.SELF_TEST_MODULE.is_active) {
+        esp_err_t clock_ret = network_clock_start();
+        if (clock_ret != ESP_OK) {
+            ESP_LOGW(TAG, "Clock synchronization failed to start: %s", esp_err_to_name(clock_ret));
+        }
+    }
 
     queue_init(&GLOBAL_STATE.stratum_queue);
 

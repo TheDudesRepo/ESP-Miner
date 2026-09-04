@@ -57,6 +57,7 @@ jobs:
         git archive --format=tar HEAD main/screen.c main/screen.h main/input.c \
           main/naja_dashboard.c main/naja_dashboard.h main/naja_dashboard_internal.h \
           main/naja_dashboard_ui.c main/btc_price.c main/btc_price.h \
+          main/network_clock.c main/network_clock.h \
           main/btc_price_data.c main/btc_price_data.h tools/tests/test_naja_dashboard.py \
           test-ci/main/test_btc_price_data.c test-ci/main/CMakeLists.txt \
           main/main.c main/CMakeLists.txt main/global_state.h \

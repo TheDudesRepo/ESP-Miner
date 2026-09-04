@@ -43,10 +43,13 @@ price is retained with a marker, but its 24-hour change is hidden.
 
 A separate low-priority task uses bounded response buffers and JSON depth,
 checks complete responses, verifies HTTPS certificates/hostnames/dates, and
-does not follow redirects. If needed it starts SNTP using `pool.ntp.org` and
-waits for a usable clock in the background. No synchronized clock means no
-new price, not a stalled display or mining task. It defers new requests during
-OTA, faults, setup, and low-PSRAM conditions.
+does not follow redirects. Normal application startup initializes SNTP using
+`pool.ntp.org` independently of the board, orientation or display state. The
+price worker waits for a usable clock in the background and can retry failed
+initialization. No synchronized clock means no new price, not a stalled LCD.
+Certificate-validated TLS pools also require a correct clock; ordinary TCP pool
+connections do not have that dependency. Price requests defer during OTA,
+faults, setup, and low-PSRAM conditions.
 
 The common ESP-IDF certificate bundle is enabled. Optional cross-signed-bundle
 verification stays disabled. Mining control, pool/wallet configuration,

@@ -10,7 +10,7 @@
 #include "esp_heap_caps.h"
 #include "esp_http_client.h"
 #include "esp_log.h"
-#include "esp_netif_sntp.h"
+#include "network_clock.h"
 #include "esp_psram.h"
 #include "esp_timer.h"
 #include "freertos/FreeRTOS.h"
@@ -50,22 +50,16 @@ typedef struct {
 static btc_price_cache_t price_cache;
 static portMUX_TYPE price_cache_mux = portMUX_INITIALIZER_UNLOCKED;
 static TaskHandle_t price_task_handle;
-static bool sntp_initialized;
 
 static bool ensure_wall_clock(void)
 {
     if (btc_price_clock_valid((int64_t)time(NULL))) {
         return true;
     }
-    if (!sntp_initialized) {
-        esp_sntp_config_t config = ESP_NETIF_SNTP_DEFAULT_CONFIG("pool.ntp.org");
-        esp_err_t err = esp_netif_sntp_init(&config);
-        if (err != ESP_OK && err != ESP_ERR_INVALID_STATE) {
-            ESP_LOGW(TAG, "Clock synchronization could not start: %s", esp_err_to_name(err));
-            return false;
-        }
-        /* INVALID_STATE means an existing owner has already initialized SNTP. */
-        sntp_initialized = true;
+    esp_err_t err = network_clock_start();
+    if (err != ESP_OK) {
+        ESP_LOGW(TAG, "Clock synchronization could not start: %s", esp_err_to_name(err));
+        return false;
     }
     for (unsigned waited = 0; waited < BTC_PRICE_TIME_WAIT_MS; waited += 500) {
         if (btc_price_clock_valid((int64_t)time(NULL))) {
