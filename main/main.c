@@ -29,6 +29,8 @@
 #include "filesystem.h"
 #include "log_buffer.h"
 #include "setup_ble.h"
+#include "naja_dashboard.h"
+#include "network_clock.h"
 #include "esp_ota_ops.h"
 
 static GlobalState GLOBAL_STATE;
@@ -206,6 +208,16 @@ void app_main(void)
     // Connected to WiFi: tear down the setup BLE service to free the radio.
     setup_ble_stop();
 
+    // Certificate date checks apply to TLS pools too, not just the price feed.
+    // Start SNTP on every normal boot, independently of board/display settings.
+    // Do not wait here: synchronization runs asynchronously with normal retries.
+    if (!GLOBAL_STATE.SELF_TEST_MODULE.is_active) {
+        esp_err_t clock_ret = network_clock_start();
+        if (clock_ret != ESP_OK) {
+            ESP_LOGW(TAG, "Clock synchronization failed to start: %s", esp_err_to_name(clock_ret));
+        }
+    }
+
     queue_init(&GLOBAL_STATE.stratum_queue);
 
     // The self-test feeds create_jobs_task a hardcoded stratum V1 mock job.
@@ -245,6 +257,16 @@ void app_main(void)
         protocol_coordinator_init(&GLOBAL_STATE);
         if (xTaskCreateWithCaps(protocol_coordinator_task, "protocol coord", 8192, (void *) &GLOBAL_STATE, 5, NULL, MALLOC_CAP_SPIRAM) != pdPASS) {
             ESP_LOGE(TAG, "Error creating protocol coordinator task");
+        }
+    }
+
+    if (!GLOBAL_STATE.SELF_TEST_MODULE.is_active &&
+        system_init_ret == ESP_OK &&
+        GLOBAL_STATE.SYSTEM_MODULE.is_screen_active &&
+        GLOBAL_STATE.DEVICE_CONFIG.pins.i80 != NULL) {
+        esp_err_t dashboard_ret = naja_dashboard_start(&GLOBAL_STATE);
+        if (dashboard_ret != ESP_OK && dashboard_ret != ESP_ERR_NOT_SUPPORTED) {
+            ESP_LOGW(TAG, "Large-display dashboard failed to start: %s", esp_err_to_name(dashboard_ret));
         }
     }
 

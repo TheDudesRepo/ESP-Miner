@@ -1,0 +1,13 @@
+name: Naja Dashboard Regression
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  dashboard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
+      - name: Test production control and cache functions with sanitizers
+        run: python3 tools/tests/test_naja_dashboard.py

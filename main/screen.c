@@ -8,6 +8,7 @@
 #include "esp_lvgl_port.h"
 #include "global_state.h"
 #include "screen.h"
+#include "naja_dashboard.h"
 #include "nvs_config.h"
 #include "display.h"
 #include "connect.h"
@@ -912,10 +913,18 @@ static void screen_update_cb(lv_timer_t * timer)
     screen_next();
 }
 
+lv_obj_t *screen_get_stats_screen(void)
+{
+    return screens[SCR_STATS];
+}
+
 void screen_button_press() 
 {
     if (GLOBAL_STATE->SYSTEM_MODULE.identify_mode_time_ms > 0) {
         GLOBAL_STATE->SYSTEM_MODULE.identify_mode_time_ms = 0;
+    } else if (naja_dashboard_next_if_active()) {
+        // Actual short-click event, not a polled LVGL inactivity heuristic.
+        lv_display_trigger_activity(NULL);
     } else if (use_stats_background()) {
         screen_show(SCR_STATS);
         lv_display_trigger_activity(NULL);
