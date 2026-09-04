@@ -1,0 +1,40 @@
+name: Clean Temporary Naja Verification Probes
+
+on:
+  push:
+    branches:
+      - feature/naja-btc-price
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Let the marker workflow finish
+        run: sleep 150
+
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Remove temporary probe files and this one-shot workflow
+        shell: bash
+        run: |
+          set -euo pipefail
+          git fetch origin "${GITHUB_REF_NAME}"
+          git reset --hard "origin/${GITHUB_REF_NAME}"
+
+          rm -rf .ci
+          rm -f doc/connection-test*.txt
+          rm -f .github/workflows/naja-result-marker.yml
+          rm -f .github/workflows/naja-cleanup-once.yml
+
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add -A
+          if ! git diff --cached --quiet; then
+            git commit -m 'chore(naja): remove temporary verification probes [skip ci]'
+            git push origin "HEAD:${GITHUB_REF_NAME}"
+          fi
