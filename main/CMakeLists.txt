@@ -176,6 +176,7 @@ else()
     # Track index.html.gz which is generated as part of the build
     set(WEB_UI_OUTPUT "${WEB_SRC_DIR}/dist/axe-os/index.html.gz")
 
+    # Custom command that only runs when source files change
     add_custom_command(
         OUTPUT ${WEB_UI_STAMP} ${WEB_UI_OUTPUT}
         COMMAND ${NPM_EXECUTABLE} i
