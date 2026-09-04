@@ -1,5 +1,7 @@
 name: Build Firmware
 on: [push, pull_request]
+permissions:
+  contents: read
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 jobs:
@@ -26,21 +28,48 @@ jobs:
         target: esp32s3
         command: GITHUB_ACTIONS="true" idf.py build
         path: '.'
-    - uses: actions/setup-python@v6
-      with:
-        python-version: '3.10'
-        cache: 'pip'
-    - run: pip install esptool
-    - name: "Create factory/merged image"
-      run: "./merge_bin.sh ./esp-miner-merged.bin"
-    - name: upload esp-miner-merged.bin
+    - name: Package application and build identity
+      shell: bash
+      run: |
+        set -euo pipefail
+        mkdir -p firmware-artifact debug-artifact
+        cp build/esp-miner.bin firmware-artifact/esp-miner.bin
+        python3 - <<'PY'
+        import hashlib, json, pathlib, subprocess
+        out = pathlib.Path('firmware-artifact')
+        binary = out / 'esp-miner.bin'
+        digest = hashlib.sha256(binary.read_bytes()).hexdigest()
+        manifest = {
+            'source_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], text=True).strip(),
+            'target': 'esp32s3', 'esp_idf': 'v6.0.2',
+            'image_type': 'application-only', 'file': binary.name,
+            'size_bytes': binary.stat().st_size, 'sha256': digest,
+            'includes_nvs': False, 'includes_bootloader': False,
+            'includes_partition_table': False, 'hardware_tested': False,
+        }
+        (out / 'manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+        (out / 'SHA256SUMS.txt').write_text(f'{digest}  esp-miner.bin\n')
+        PY
+        cp build/esp-miner.elf build/esp-miner.map sdkconfig debug-artifact/
+        cp build/partition_table/partition-table.bin debug-artifact/
+        # Exact reviewed source, without credentials or local settings.
+        git archive --format=tar HEAD main/screen.c main/screen.h main/input.c \
+          main/naja_dashboard.c main/naja_dashboard.h main/naja_dashboard_internal.h \
+          main/naja_dashboard_ui.c main/btc_price.c main/btc_price.h \
+          main/main.c main/CMakeLists.txt main/global_state.h \
+          main/system.h main/device_config.h main/display.h \
+          components/connect main/tasks/power_management_task.h \
+          main/idf_component.yml main/lv_conf.h sdkconfig.defaults partitions.csv \
+          .github/workflows/build.yml > debug-artifact/reviewed-source.tar
+    - name: Upload application-only firmware
       uses: actions/upload-artifact@v4
       with:
-        name: esp-miner-factory.bin
-        path: ./esp-miner-merged.bin
-    - name: upload esp-miner.bin
+        name: esp-miner-application-ota
+        path: firmware-artifact/
+        if-no-files-found: error
+    - name: Upload debug metadata
       uses: actions/upload-artifact@v4
       with:
-        name: esp-miner.bin
-        path: ./build/esp-miner.bin
-
+        name: esp-miner-debug
+        path: debug-artifact/
+        if-no-files-found: error
