@@ -2,8 +2,8 @@
 
 Status: **FAIL**
 
-Tested source commit: `e370fd858ee4bb2f55715985d39dfc237465a2a1`
-Workflow run: `https://github.com/TheDudesRepo/ESP-Miner/actions/runs/33914552605`
+Tested source commit: `89143ec29c0f2160f37e70793e74e82faf9ca386`
+Workflow run: `https://github.com/TheDudesRepo/ESP-Miner/actions/runs/33917421868`
 
 - Static feature/privacy checks: failure
 - AxeOS production build: success
@@ -13,5 +13,5 @@ Workflow run: `https://github.com/TheDudesRepo/ESP-Miner/actions/runs/3391455260
 ## Firmware log tail
 
 ```text
-/home/runner/work/_temp/b02036dc-b015-4abf-abd0-8c330328a8c1.sh: line 8: idf.py: command not found
+/home/runner/work/_temp/ebea3e14-06e5-4c56-9176-119bba626561.sh: line 8: idf.py: command not found
 \`\`\`
