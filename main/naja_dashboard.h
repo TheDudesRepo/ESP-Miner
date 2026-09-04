@@ -1,6 +1,7 @@
 #ifndef NAJA_DASHBOARD_H_
 #define NAJA_DASHBOARD_H_
 
+#include <stdbool.h>
 #include "esp_err.h"
 
 typedef struct GlobalState GlobalState;
@@ -13,5 +14,7 @@ typedef struct GlobalState GlobalState;
  * remain authoritative and unobstructed.
  */
 esp_err_t naja_dashboard_start(GlobalState *global_state);
+/* Called by screen_button_press in LVGL context; false preserves stock behavior. */
+bool naja_dashboard_next_if_active(void);
 
 #endif /* NAJA_DASHBOARD_H_ */

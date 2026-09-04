@@ -323,7 +323,7 @@ static void create_mining_page(void)
 
     dashboard.mining_hashrate = create_metric(page, 8, 29, 144, "HASHRATE");
     dashboard.mining_session_best = create_metric(page, 164, 29, 148, "SESSION BEST");
-    dashboard.mining_shares = create_metric(page, 8, 71, 144, "ACCEPTED / REJECTED");
+    dashboard.mining_shares = create_metric(page, 8, 71, 144, "ACCEPT / REJECT");
     dashboard.mining_pool_diff = create_metric(page, 164, 71, 148, "POOL DIFFICULTY");
     dashboard.mining_block = create_metric(page, 8, 113, 144, "BLOCK HEIGHT");
     dashboard.mining_all_time_best = create_metric(page, 164, 113, 148, "ALL-TIME BEST");
@@ -385,7 +385,7 @@ static void create_network_page(void)
 
 void dashboard_set_page(dashboard_page_t page)
 {
-    if (page >= DASH_PAGE_COUNT || dashboard.root == NULL) {
+    if ((unsigned)page >= DASH_PAGE_COUNT || dashboard.root == NULL) {
         return;
     }
 
@@ -398,10 +398,25 @@ void dashboard_set_page(dashboard_page_t page)
     dashboard_set_label_format(dashboard.header_page, "%d/%d", page + 1, DASH_PAGE_COUNT);
 }
 
+static void dashboard_root_deleted(lv_event_t *event)
+{
+    if (lv_event_get_target(event) == dashboard.root) {
+        dashboard_reset_ui();
+    }
+}
+
 void dashboard_create_ui(lv_obj_t *parent)
 {
+    if (parent == NULL || dashboard.root != NULL) {
+        return;
+    }
     dashboard.parent_screen = parent;
     dashboard.root = lv_obj_create(parent);
+    if (dashboard.root == NULL) {
+        dashboard_reset_ui();
+        return;
+    }
+    lv_obj_add_event_cb(dashboard.root, dashboard_root_deleted, LV_EVENT_DELETE, NULL);
     set_container_style(dashboard.root, COLOR_BACKGROUND, LV_OPA_COVER);
     lv_obj_set_pos(dashboard.root, 0, 0);
     lv_obj_set_size(dashboard.root, DASHBOARD_WIDTH, DASHBOARD_HEIGHT);
@@ -414,8 +429,6 @@ void dashboard_create_ui(lv_obj_t *parent)
     dashboard_set_page(DASH_PAGE_HOME);
 
     dashboard.last_block_found = dashboard.global_state->SYSTEM_MODULE.block_found;
-    dashboard.previous_inactive_ms = lv_display_get_inactive_time(NULL);
-    dashboard.activity_initialized = true;
     lv_obj_move_foreground(dashboard.root);
     ESP_LOGI(TAG, "Attached four-page dashboard to the 320x170 stats screen");
 }
@@ -423,11 +436,8 @@ void dashboard_create_ui(lv_obj_t *parent)
 void dashboard_reset_ui(void)
 {
     dashboard.parent_screen = NULL;
-    dashboard.candidate_parent = NULL;
-    dashboard.candidate_since_us = 0;
     dashboard.root = NULL;
     memset(dashboard.pages, 0, sizeof(dashboard.pages));
-    dashboard.activity_initialized = false;
 
     dashboard.header_price = NULL;
     dashboard.header_page = NULL;

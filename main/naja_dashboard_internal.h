@@ -13,7 +13,6 @@
 #define DASHBOARD_HEADER_HEIGHT 24
 #define DASHBOARD_PAGE_HEIGHT (DASHBOARD_HEIGHT - DASHBOARD_HEADER_HEIGHT)
 #define DASHBOARD_UPDATE_MS 500
-#define DASHBOARD_PARENT_STABLE_US 1000000LL
 #define DASHBOARD_PAGE_ROTATE_US 10000000LL
 #define DASHBOARD_RSSI_REFRESH_US 5000000LL
 #define DASHBOARD_PRICE_TASK_RETRY_US 30000000LL
@@ -41,14 +40,10 @@ typedef struct {
     GlobalState *global_state;
     lv_timer_t *timer;
     lv_obj_t *parent_screen;
-    lv_obj_t *candidate_parent;
-    int64_t candidate_since_us;
     lv_obj_t *root;
     lv_obj_t *pages[DASH_PAGE_COUNT];
     dashboard_page_t current_page;
     int64_t page_changed_at_us;
-    uint32_t previous_inactive_ms;
-    bool activity_initialized;
     int last_block_found;
     int8_t rssi;
     int64_t rssi_updated_at_us;
@@ -95,7 +90,8 @@ typedef struct {
 extern dashboard_state_t dashboard;
 
 void dashboard_set_label_text(lv_obj_t *label, const char *text);
-void dashboard_set_label_format(lv_obj_t *label, const char *format, ...);
+void dashboard_set_label_format(lv_obj_t *label, const char *format, ...)
+    __attribute__((format(printf, 2, 3)));
 void dashboard_format_usd(double usd, bool approximate, char *buffer, size_t buffer_size);
 void dashboard_format_hashrate(float hashrate_ghs, char *buffer, size_t buffer_size);
 void dashboard_format_compact_double(double value, char *buffer, size_t buffer_size);

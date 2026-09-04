@@ -254,7 +254,7 @@ void app_main(void)
         GLOBAL_STATE.SYSTEM_MODULE.is_screen_active &&
         GLOBAL_STATE.DEVICE_CONFIG.pins.i80 != NULL) {
         esp_err_t dashboard_ret = naja_dashboard_start(&GLOBAL_STATE);
-        if (dashboard_ret != ESP_OK) {
+        if (dashboard_ret != ESP_OK && dashboard_ret != ESP_ERR_NOT_SUPPORTED) {
             ESP_LOGW(TAG, "Large-display dashboard failed to start: %s", esp_err_to_name(dashboard_ret));
         }
     }

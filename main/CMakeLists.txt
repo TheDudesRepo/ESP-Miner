@@ -8,6 +8,7 @@ SRCS
     "display.c"
     "screen.c"
     "btc_price.c"
+    "btc_price_data.c"
     "naja_dashboard.c"
     "naja_dashboard_ui.c"
     "input.c"

@@ -5,12 +5,14 @@
 #include <math.h>
 #include <stdbool.h>
 #include <stdint.h>
+#include <string.h>
 
 #include "btc_price.h"
 #include "connect.h"
 #include "esp_log.h"
 #include "esp_lvgl_port.h"
 #include "esp_timer.h"
+#include "screen.h"
 
 static const char *TAG = "naja_dashboard";
 
@@ -64,7 +66,7 @@ static void update_home(const btc_price_snapshot_t *price)
         dashboard_set_label_text(dashboard.home_price, "$--");
     }
 
-    if (price->valid && price->has_change_24h) {
+    if (price->valid && !price->stale && price->has_change_24h) {
         dashboard_set_label_format(dashboard.home_change, "24H %+.2f%%", price->change_24h);
         lv_obj_set_style_text_color(
             dashboard.home_change,
@@ -83,14 +85,13 @@ static void update_home(const btc_price_snapshot_t *price)
         dashboard_set_label_text(dashboard.home_status, "BLOCK FOUND!");
         lv_obj_set_style_text_color(dashboard.home_status, lv_color_hex(COLOR_BITCOIN), LV_PART_MAIN);
     } else if (price->valid) {
-        char age[32];
-        dashboard_format_age(price->age_seconds, age, sizeof(age));
         dashboard_set_label_format(
             dashboard.home_status,
-            "%s | %s%s",
+            "%s Q:%" PRIu32 "m F:%" PRIu32 "m%s",
             btc_price_source_name(price->source),
-            age,
-            price->stale ? " | STALE" : ""
+            price->age_seconds / 60U,
+            price->fetched_age_seconds / 60U,
+            price->stale ? " STALE" : ""
         );
         lv_obj_set_style_text_color(
             dashboard.home_status,
@@ -98,7 +99,7 @@ static void update_home(const btc_price_snapshot_t *price)
             LV_PART_MAIN
         );
     } else {
-        dashboard_set_label_text(dashboard.home_status, "Fetching BTC price (mempool fallback)");
+        dashboard_set_label_text(dashboard.home_status, "Waiting for clock / fresh BTC quote");
         lv_obj_set_style_text_color(dashboard.home_status, lv_color_hex(COLOR_MUTED), LV_PART_MAIN);
     }
 
@@ -269,62 +270,56 @@ static void update_network(void)
     );
 }
 
-static void attach_when_stats_screen_is_stable(int64_t now_us)
+static bool dashboard_landscape_supported(void)
 {
-    lv_obj_t *active = lv_screen_active();
-    if (active == NULL) {
-        return;
-    }
+    return lv_display_get_default() != NULL &&
+        lv_display_get_horizontal_resolution(NULL) == DASHBOARD_WIDTH &&
+        lv_display_get_vertical_resolution(NULL) == DASHBOARD_HEIGHT;
+}
 
-    if (active != dashboard.candidate_parent) {
-        dashboard.candidate_parent = active;
-        dashboard.candidate_since_us = now_us;
-        return;
+static bool dashboard_allowed(void)
+{
+    if (dashboard.global_state == NULL || !dashboard_landscape_supported()) {
+        return false;
     }
+    SystemModule *module = &dashboard.global_state->SYSTEM_MODULE;
+    return module->is_screen_active && module->is_connected && !module->ap_enabled &&
+        !module->is_firmware_update && !module->overheat_mode && !module->hardware_fault &&
+        module->asic_status == NULL && module->identify_mode_time_ms <= 0 &&
+        !dashboard.global_state->SELF_TEST_MODULE.is_active;
+}
 
-    if (now_us - dashboard.candidate_since_us >= DASHBOARD_PARENT_STABLE_US) {
-        dashboard_create_ui(active);
+bool naja_dashboard_next_if_active(void)
+{
+    // screen_button_press and this handler both run in the LVGL context.
+    if (!dashboard_allowed() || dashboard.root == NULL || !lv_obj_is_valid(dashboard.root) ||
+        lv_obj_has_flag(dashboard.root, LV_OBJ_FLAG_HIDDEN) ||
+        dashboard.parent_screen != lv_screen_active() ||
+        dashboard.parent_screen != screen_get_stats_screen()) {
+        return false;
     }
+    if (dashboard.global_state->SYSTEM_MODULE.show_new_block) {
+        dashboard_set_page(DASH_PAGE_HOME);
+    } else {
+        dashboard_set_page((dashboard.current_page + 1) % DASH_PAGE_COUNT);
+    }
+    return true;
 }
 
 static void handle_page_rotation(int64_t now_us)
 {
-    if (dashboard.parent_screen != lv_screen_active()) {
-        dashboard.activity_initialized = false;
+    if (!dashboard_allowed() || dashboard.parent_screen != lv_screen_active() ||
+        dashboard.root == NULL || lv_obj_has_flag(dashboard.root, LV_OBJ_FLAG_HIDDEN)) {
+        dashboard.page_changed_at_us = now_us;
         return;
     }
-
-    const uint32_t inactive_ms = lv_display_get_inactive_time(NULL);
-
     if (dashboard.global_state->SYSTEM_MODULE.show_new_block) {
         if (dashboard.current_page != DASH_PAGE_HOME) {
             dashboard_set_page(DASH_PAGE_HOME);
-        } else {
-            dashboard.page_changed_at_us = now_us;
         }
-        dashboard.previous_inactive_ms = inactive_ms;
-        dashboard.activity_initialized = true;
-        return;
-    }
-
-    if (!dashboard.activity_initialized) {
-        dashboard.previous_inactive_ms = inactive_ms;
-        dashboard.activity_initialized = true;
         dashboard.page_changed_at_us = now_us;
         return;
-    } else {
-        const bool activity_reset =
-            inactive_ms < DASHBOARD_UPDATE_MS + 100 &&
-            dashboard.previous_inactive_ms > inactive_ms + 100;
-        dashboard.previous_inactive_ms = inactive_ms;
-
-        // ESP-Miner resets LVGL activity when the large-display button is
-        // pressed. Use that reset as a request for the next dashboard page.
-        if (activity_reset) {
-            dashboard_set_page((dashboard.current_page + 1) % DASH_PAGE_COUNT);
-        }
     }
-
     if (now_us - dashboard.page_changed_at_us >= DASHBOARD_PAGE_ROTATE_US) {
         dashboard_set_page((dashboard.current_page + 1) % DASH_PAGE_COUNT);
     }
@@ -333,43 +328,31 @@ static void handle_page_rotation(int64_t now_us)
 static void dashboard_timer_cb(lv_timer_t *timer)
 {
     (void)timer;
-
     if (dashboard.global_state == NULL) {
         return;
     }
-
-    SystemModule *module = &dashboard.global_state->SYSTEM_MODULE;
-    const bool dashboard_allowed =
-        module->is_connected &&
-        !module->ap_enabled &&
-        !module->is_firmware_update &&
-        !module->overheat_mode &&
-        !module->hardware_fault &&
-        module->asic_status == NULL;
-
-    if (!dashboard_allowed) {
+    const int64_t now_us = esp_timer_get_time();
+    if (!dashboard_allowed() || lv_screen_active() != screen_get_stats_screen()) {
         if (dashboard.root != NULL && lv_obj_is_valid(dashboard.root)) {
             lv_obj_add_flag(dashboard.root, LV_OBJ_FLAG_HIDDEN);
         }
-        dashboard.candidate_parent = NULL;
-        dashboard.candidate_since_us = 0;
-        dashboard.activity_initialized = false;
+        dashboard.page_changed_at_us = now_us;
+        if (!dashboard.global_state->SYSTEM_MODULE.is_connected) {
+            dashboard.rssi = -128;
+            dashboard.rssi_updated_at_us = 0;
+        }
         return;
     }
-
-    const int64_t now_us = esp_timer_get_time();
-
     if (dashboard.root != NULL && !lv_obj_is_valid(dashboard.root)) {
         dashboard_reset_ui();
     }
-
     if (dashboard.root == NULL) {
-        attach_when_stats_screen_is_stable(now_us);
-        return;
+        dashboard_create_ui(screen_get_stats_screen());
+        if (dashboard.root == NULL) {
+            return;
+        }
     }
-
     lv_obj_clear_flag(dashboard.root, LV_OBJ_FLAG_HIDDEN);
-
     if (!dashboard.price_task_started && now_us >= dashboard.price_task_retry_at_us) {
         const esp_err_t result = btc_price_start(dashboard.global_state);
         if (result == ESP_OK) {
@@ -379,9 +362,7 @@ static void dashboard_timer_cb(lv_timer_t *timer)
             dashboard.price_task_retry_at_us = now_us + DASHBOARD_PRICE_TASK_RETRY_US;
         }
     }
-
     update_rssi(now_us);
-
     btc_price_snapshot_t price;
     btc_price_get_snapshot(&price);
     update_header(&price);
@@ -389,12 +370,10 @@ static void dashboard_timer_cb(lv_timer_t *timer)
     update_mining();
     update_hardware();
     update_network();
-
     if (dashboard.global_state->SYSTEM_MODULE.block_found != dashboard.last_block_found) {
         dashboard.last_block_found = dashboard.global_state->SYSTEM_MODULE.block_found;
         dashboard_set_page(DASH_PAGE_HOME);
     }
-
     handle_page_rotation(now_us);
 }
 
@@ -402,6 +381,13 @@ esp_err_t naja_dashboard_start(GlobalState *global_state)
 {
     if (global_state == NULL) {
         return ESP_ERR_INVALID_ARG;
+    }
+
+    // Limit the first hardware trial to the requested Naja Duo 1201.
+    if (global_state->DEVICE_CONFIG.board_version == NULL ||
+        strcmp(global_state->DEVICE_CONFIG.board_version, "1201") != 0 ||
+        global_state->DISPLAY_CONFIG.display != ST7789_I80) {
+        return ESP_ERR_NOT_SUPPORTED;
     }
 
     if (dashboard.timer != NULL) {
@@ -424,6 +410,6 @@ esp_err_t naja_dashboard_start(GlobalState *global_state)
         return ESP_ERR_NO_MEM;
     }
 
-    ESP_LOGI(TAG, "Naja/Gamma large-display dashboard started");
+    ESP_LOGI(TAG, "Naja 1201 dashboard started (320x170 landscape only)");
     return ESP_OK;
 }
