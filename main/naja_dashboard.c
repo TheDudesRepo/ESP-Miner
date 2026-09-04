@@ -81,9 +81,7 @@ static void update_home(const btc_price_snapshot_t *price)
 
     if (module->show_new_block) {
         dashboard_set_label_text(dashboard.home_status, "BLOCK FOUND!");
-        lv_obj_set_style_text_color(
-            dashboard.home_status, lv_color_hex(COLOR_BITCOIN), LV_PART_MAIN
-        );
+        lv_obj_set_style_text_color(dashboard.home_status, lv_color_hex(COLOR_BITCOIN), LV_PART_MAIN);
     } else if (price->valid) {
         char age[32];
         dashboard_format_age(price->age_seconds, age, sizeof(age));
@@ -101,9 +99,7 @@ static void update_home(const btc_price_snapshot_t *price)
         );
     } else {
         dashboard_set_label_text(dashboard.home_status, "Fetching BTC price (mempool fallback)");
-        lv_obj_set_style_text_color(
-            dashboard.home_status, lv_color_hex(COLOR_MUTED), LV_PART_MAIN
-        );
+        lv_obj_set_style_text_color(dashboard.home_status, lv_color_hex(COLOR_MUTED), LV_PART_MAIN);
     }
 
     char value[32];
@@ -156,9 +152,7 @@ static void update_mining(void)
             dashboard.global_state->stratum_protocol == STRATUM_PROTOCOL_V2 ? "SV2" : "--"
         );
     } else {
-        dashboard_set_label_format(
-            dashboard.mining_block, "%d", dashboard.global_state->block_height
-        );
+        dashboard_set_label_format(dashboard.mining_block, "%d", dashboard.global_state->block_height);
     }
 
     dashboard_set_label_text(
@@ -248,7 +242,7 @@ static void update_network(void)
     dashboard_set_label_text(
         dashboard.network_ssid,
         module->ssid != NULL && module->ssid[0] != '\0' ? module->ssid : "--"
-   );
+    );
     dashboard_set_label_text(
         dashboard.network_ip,
         module->ip_addr_str[0] != '\0' ? module->ip_addr_str : "--"
@@ -256,7 +250,10 @@ static void update_network(void)
 
     if (dashboard.rssi > -128) {
         dashboard_set_label_format(
-            dashboard.network_rssi, "%d dBm  %s", dashboard.rssi, dashboard_rssi_quality(dashboard.rssi)
+            dashboard.network_rssi,
+            "%d dBm  %s",
+            dashboard.rssi,
+            dashboard_rssi_quality(dashboard.rssi)
         );
     } else {
         dashboard_set_label_text(dashboard.network_rssi, "-- dBm  --");
@@ -298,6 +295,18 @@ static void handle_page_rotation(int64_t now_us)
     }
 
     const uint32_t inactive_ms = lv_display_get_inactive_time(NULL);
+
+    if (dashboard.global_state->SYSTEM_MODULE.show_new_block) {
+        if (dashboard.current_page != DASH_PAGE_HOME) {
+            dashboard_set_page(DASH_PAGE_HOME);
+        } else {
+            dashboard.page_changed_at_us = now_us;
+        }
+        dashboard.previous_inactive_ms = inactive_ms;
+        dashboard.activity_initialized = true;
+        return;
+    }
+
     if (!dashboard.activity_initialized) {
         dashboard.previous_inactive_ms = inactive_ms;
         dashboard.activity_initialized = true;
@@ -311,7 +320,7 @@ static void handle_page_rotation(int64_t now_us)
 
         // ESP-Miner resets LVGL activity when the large-display button is
         // pressed. Use that reset as a request for the next dashboard page.
-        if (activity_reset && !dashboard.global_state->SYSTEM_MODULE.show_new_block) {
+        if (activity_reset) {
             dashboard_set_page((dashboard.current_page + 1) % DASH_PAGE_COUNT);
         }
     }
